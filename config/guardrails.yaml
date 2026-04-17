@@ -1,0 +1,71 @@
+# =============================================================================
+# Agentic AI OS — Guardrails Configuration
+# =============================================================================
+
+guardrails:
+
+  # Global on/off switches
+  enabled: true
+  content_filter_enabled: true
+  permission_check_enabled: true
+  prompt_injection_detection: true
+  audit_logging: true
+
+  # Risk thresholds
+  block_at_risk_level: "high"   # low | medium | high | critical
+
+  # Input limits
+  max_input_length: 50000
+  max_tokens_per_request: 8192
+
+  # Content filter rules
+  content_filter:
+    hard_block_patterns:
+      - "rm\\s+-rf\\s+[/~]"
+      - "synthesize.*(drugs|explosives|weapons|malware)"
+      - "child.*(pornography|exploitation)"
+      - "(hack|crack|exploit).*(bank|financial|government|military)"
+
+    soft_warn_patterns:
+      - "delete.*(all|everything|database)"
+      - "(password|credentials|api.key|secret)"
+      - "(phishing|scam|fraud)"
+
+    # Custom block list (add domain-specific sensitive topics)
+    custom_blocked_topics: []
+
+  # Prompt injection detection
+  prompt_injection:
+    enabled: true
+    patterns:
+      - "ignore.*(previous|prior).*instructions"
+      - "you are now.*different.*ai"
+      - "jailbreak"
+      - "act as if you"
+      - "pretend you are"
+      - "<\\s*system\\s*>"
+      - "\\[INST\\]"
+
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    default_requests_per_minute: 60
+    burst_multiplier: 2
+    per_ip_enabled: true
+
+  # Audit logging
+  audit:
+    log_all_requests: true
+    log_tool_calls: true
+    log_guardrail_violations: true
+    hmac_signing: true
+    retention_days: 90
+
+  # Sandbox settings
+  sandbox:
+    docker_enabled: true
+    network_disabled: true
+    max_memory_mb: 256
+    max_cpu_percent: 50
+    execution_timeout_seconds: 30
+    tmp_size_mb: 64

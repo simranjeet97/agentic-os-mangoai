@@ -1,0 +1,52 @@
+# =============================================================================
+# Agentic AI OS — Code Execution Sandbox Dockerfile
+# Minimal Alpine-based image with Python 3.12, Node.js, and bash
+# Runs with no network, strict resource limits
+# =============================================================================
+
+FROM python:3.12-alpine
+
+LABEL maintainer="Agentic AI OS"
+LABEL description="Isolated code execution sandbox"
+
+# ── Install system dependencies ───────────────────────────────────────────────
+RUN apk add --no-cache \
+    bash \
+    nodejs \
+    npm \
+    curl \
+    git \
+    jq \
+    coreutils \
+    findutils \
+    grep \
+    sed \
+    awk \
+    && rm -rf /var/cache/apk/*
+
+# ── Create non-root sandbox user ─────────────────────────────────────────────
+RUN addgroup -S sandbox && adduser -S -G sandbox sandbox
+
+# ── Set up working directory ──────────────────────────────────────────────────
+RUN mkdir -p /sandbox/workspace && chown -R sandbox:sandbox /sandbox
+
+# ── Install common Python packages for code execution ─────────────────────────
+RUN pip install --no-cache-dir \
+    requests \
+    numpy \
+    pandas \
+    matplotlib \
+    pyyaml \
+    click \
+    rich
+
+WORKDIR /sandbox/workspace
+USER sandbox
+
+# ── Resource limits applied at container run time by sandbox_manager.py ───────
+# - mem_limit=256m
+# - cpu_quota=50000 (50% of 1 CPU)
+# - network_mode=none
+# - no-new-privileges
+
+CMD ["/bin/sh"]

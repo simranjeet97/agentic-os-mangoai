@@ -1,0 +1,67 @@
+# =============================================================================
+# Agentic AI OS — .gitignore
+# =============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.python-version
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Node.js / UI
+node_modules/
+ui/node_modules/
+ui/dist/
+ui/dist-electron/
+.pnpm-store/
+
+# Docker
+.docker/
+
+# ChromaDB data
+chroma_data/
+
+# Redis data
+redis_data/
+
+# Sandbox tmp
+sandbox_tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Security — NEVER commit these
+*.pem
+*.key
+*.cert
+secrets/

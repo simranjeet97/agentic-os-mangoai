@@ -1,0 +1,114 @@
+# =============================================================================
+# Agentic AI OS — RBAC Permissions Configuration
+# =============================================================================
+# Capabilities are checked by PermissionEngine before agent execution.
+# Roles are hierarchical: admin > operator > user > readonly > guest
+
+roles:
+
+  admin:
+    description: "Full system access — trusted administrators only"
+    capabilities:
+      - file_read
+      - file_write
+      - file_delete
+      - shell_exec
+      - docker_run
+      - web_browse
+      - web_search
+      - code_generate
+      - code_execute
+      - code_lint
+      - code_test
+      - memory_read
+      - memory_write
+      - memory_delete
+      - process_list
+      - process_kill
+      - config_read
+      - config_write
+      - audit_read
+    rate_limits:
+      requests_per_minute: 300
+      max_concurrent_tasks: 10
+
+  operator:
+    description: "Elevated access for power users and automation"
+    capabilities:
+      - file_read
+      - file_write
+      - shell_exec
+      - web_browse
+      - web_search
+      - code_generate
+      - code_execute
+      - code_lint
+      - memory_read
+      - memory_write
+      - process_list
+    rate_limits:
+      requests_per_minute: 120
+      max_concurrent_tasks: 5
+
+  user:
+    description: "Standard user — full research and code generation"
+    capabilities:
+      - file_read
+      - web_browse
+      - web_search
+      - code_generate
+      - code_lint
+      - memory_read
+    rate_limits:
+      requests_per_minute: 60
+      max_concurrent_tasks: 3
+
+  readonly:
+    description: "Read-only access for monitoring and inspection"
+    capabilities:
+      - file_read
+      - memory_read
+      - web_search
+    rate_limits:
+      requests_per_minute: 30
+      max_concurrent_tasks: 1
+
+  guest:
+    description: "Minimal access — unauthenticated or trial users"
+    capabilities:
+      - web_search
+    rate_limits:
+      requests_per_minute: 10
+      max_concurrent_tasks: 1
+
+  default:
+    description: "Default role when no role is specified"
+    capabilities:
+      - file_read
+      - web_search
+      - code_generate
+    rate_limits:
+      requests_per_minute: 30
+      max_concurrent_tasks: 2
+
+# Capability definitions (documentation)
+capability_definitions:
+  file_read:      "Read files from the sandbox"
+  file_write:     "Write files to the sandbox"
+  file_delete:    "Delete files from the sandbox"
+  shell_exec:     "Execute shell commands in sandbox"
+  docker_run:     "Run Docker containers"
+  web_browse:     "Use Playwright browser"
+  web_search:     "Search the web via DuckDuckGo/SerpAPI"
+  code_generate:  "Generate code with LLM"
+  code_execute:   "Execute code in sandbox"
+  code_lint:      "Run linters on code"
+  code_test:      "Run test suites"
+  memory_read:    "Read from Redis/ChromaDB"
+  memory_write:   "Write to Redis/ChromaDB"
+  memory_delete:  "Delete memory records"
+  process_list:   "List system processes"
+  process_kill:   "Terminate a process"
+  config_read:    "Read system configuration"
+  config_write:   "Modify system configuration"
+  audit_read:     "Read audit logs"

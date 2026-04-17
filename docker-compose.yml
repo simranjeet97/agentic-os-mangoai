@@ -1,0 +1,209 @@
+version: "3.9"
+
+name: agentic-os
+
+# =============================================================================
+# Agentic AI OS — Docker Compose Stack
+# Services: Redis, ChromaDB, Ollama, FastAPI, Sandbox
+# =============================================================================
+
+networks:
+  agentic-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  redis_data:
+  chroma_data:
+  ollama_data:
+  sandbox_tmp:
+  logs_data:
+
+services:
+
+  # ── Redis — Short-Term Working Memory ───────────────────────────────────────
+  redis:
+    image: redis:7.4-alpine
+    container_name: agentic-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-agenticsecret}
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel notice
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      agentic-net:
+        ipv4_address: 172.30.0.10
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD:-agenticsecret}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── ChromaDB — Long-Term Vector Memory ──────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    container_name: agentic-chromadb
+    restart: unless-stopped
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8001
+      - ANONYMIZED_TELEMETRY=false
+      - ALLOW_RESET=false
+      - IS_PERSISTENT=true
+      - PERSIST_DIRECTORY=/chroma/data
+    ports:
+      - "8001:8001"
+    volumes:
+      - chroma_data:/chroma/data
+    networks:
+      agentic-net:
+        ipv4_address: 172.30.0.11
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/v1/heartbeat"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ── Ollama — Local LLM Backend ───────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: agentic-ollama
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NUM_PARALLEL=2
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      agentic-net:
+        ipv4_address: 172.30.0.12
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+
+  # ── Sandbox — Isolated Code Execution ───────────────────────────────────────
+  sandbox:
+    build:
+      context: ./sandbox
+      dockerfile: Dockerfile.sandbox
+    container_name: agentic-sandbox
+    restart: unless-stopped
+    environment:
+      - SANDBOX_MAX_CPU=0.5
+      - SANDBOX_MAX_MEMORY=512m
+      - SANDBOX_TIMEOUT=30
+    volumes:
+      - sandbox_tmp:/tmp/sandbox
+    networks:
+      agentic-net:
+        ipv4_address: 172.30.0.13
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    read_only: false
+    tmpfs:
+      - /run:noexec,nosuid,size=64m
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: agentic-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-agenticsecret}@redis:6379/0
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8001
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - SANDBOX_HOST=sandbox
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=production
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+      - logs_data:/app/logs
+    networks:
+      agentic-net:
+        ipv4_address: 172.30.0.20
+    depends_on:
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: >
+      uvicorn api.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 2
+      --log-level info
+      --access-log
+
+  # ── Prometheus — Metrics Collection ─────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: agentic-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      agentic-net:
+        ipv4_address: 172.30.0.30
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+
+  # ── Grafana — Observability Dashboard ───────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: agentic-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3001:3000"
+    networks:
+      agentic-net:
+        ipv4_address: 172.30.0.31
+    depends_on:
+      - prometheus

@@ -1,0 +1,106 @@
+# =============================================================================
+# Agentic AI OS — Agent Configuration
+# =============================================================================
+
+default_settings:
+  base_url: "http://localhost:11434"
+  timeout: 120
+  max_retries: 3
+  retry_delay: 2.0
+
+agents:
+
+  planner:
+    model: "llama3.2:3b"
+    temperature: 0.0
+    max_tokens: 4096
+    system_prompt: |
+      You are the Planner agent. Decompose goals into ordered, precise task steps.
+    tools:
+      - memory_read
+      - task_decompose
+    max_plan_steps: 20
+    capabilities:
+      - read_memory
+      - write_plan
+
+  executor:
+    model: "llama3.2:3b"
+    temperature: 0.1
+    max_tokens: 2048
+    tools:
+      - tool_router
+      - state_tracker
+    capabilities:
+      - dispatch_agents
+      - track_state
+
+  file:
+    model: "llama3.2:3b"
+    temperature: 0.0
+    max_tokens: 2048
+    sandbox_root: "/tmp/agentic-sandbox"
+    max_file_size_mb: 10
+    allowed_extensions:
+      - .txt
+      - .md
+      - .py
+      - .js
+      - .ts
+      - .json
+      - .yaml
+      - .yml
+      - .csv
+      - .html
+      - .css
+      - .sh
+      - .log
+    capabilities:
+      - file_read
+      - file_write
+      - file_list
+      - file_search
+
+  web:
+    model: "llama3.2:3b"
+    temperature: 0.0
+    max_tokens: 4096
+    max_page_chars: 20000
+    request_timeout: 30
+    search_engine: "duckduckgo"
+    use_playwright: true
+    capabilities:
+      - web_browse
+      - web_search
+      - web_scrape
+
+  system:
+    model: "llama3.2:3b"
+    temperature: 0.0
+    max_tokens: 2048
+    sandbox: true
+    command_timeout: 30
+    blocked_commands:
+      - "rm -rf /"
+      - "dd if=/dev/zero"
+      - ":(){ :|:& };:"
+      - "mkfs"
+    capabilities:
+      - shell_exec
+      - process_list
+
+  code:
+    model: "llama3.2:3b"
+    temperature: 0.1
+    max_tokens: 8192
+    supported_languages:
+      - python
+      - javascript
+      - bash
+    execute_in_sandbox: true
+    lint_on_generate: true
+    capabilities:
+      - code_generate
+      - code_execute
+      - code_lint
+      - code_test
