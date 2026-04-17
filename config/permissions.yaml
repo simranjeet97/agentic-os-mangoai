@@ -1,8 +1,8 @@
 # =============================================================================
 # Agentic AI OS — RBAC Permissions Configuration
 # =============================================================================
-# Capabilities are checked by PermissionEngine before agent execution.
-# Roles are hierarchical: admin > operator > user > readonly > guest
+# Capabilities are checked by PermissionEngine and PermissionChecker before
+# any agent action. Roles are hierarchical: admin > operator > user > readonly > guest
 
 roles:
 
@@ -28,6 +28,7 @@ roles:
       - config_read
       - config_write
       - audit_read
+      - task_decompose
     rate_limits:
       requests_per_minute: 300
       max_concurrent_tasks: 10
@@ -46,6 +47,7 @@ roles:
       - memory_read
       - memory_write
       - process_list
+      - task_decompose
     rate_limits:
       requests_per_minute: 120
       max_concurrent_tasks: 5
@@ -59,6 +61,7 @@ roles:
       - code_generate
       - code_lint
       - memory_read
+      - task_decompose
     rate_limits:
       requests_per_minute: 60
       max_concurrent_tasks: 3
@@ -87,11 +90,88 @@ roles:
       - file_read
       - web_search
       - code_generate
+      - memory_read
     rate_limits:
       requests_per_minute: 30
       max_concurrent_tasks: 2
 
+# =============================================================================
+# Agent type RBAC (used by PermissionChecker)
+# Maps agent_type strings to allowed capabilities
+# =============================================================================
+agent_roles:
+  planner_agent:
+    - memory_read
+    - memory_write
+    - task_decompose
+    - web_search
+  executor_agent:
+    - shell_exec
+    - docker_run
+    - file_write
+    - code_execute
+    - memory_read
+    - memory_write
+  file_agent:
+    - file_read
+    - file_write
+    - file_delete
+    - memory_read
+  web_agent:
+    - web_browse
+    - web_search
+    - memory_read
+    - memory_write
+  system_agent:
+    - shell_exec
+    - process_list
+    - process_kill
+    - config_read
+  code_agent:
+    - code_generate
+    - code_execute
+    - code_lint
+    - code_test
+    - file_read
+    - file_write
+  default:
+    - file_read
+    - web_search
+    - code_generate
+    - memory_read
+
+# =============================================================================
+# File Zones (used by PermissionChecker)
+# READONLY:     No writes allowed, ever
+# AGENT_WRITE:  Agent can write without user confirmation
+# USER_CONFIRM: Writes require explicit human approval
+# =============================================================================
+file_zones:
+  READONLY:
+    - /etc
+    - /usr
+    - /bin
+    - /sbin
+    - /lib
+    - /lib64
+    - /proc
+    - /sys
+    - /boot
+    - /dev
+  AGENT_WRITE:
+    - /tmp/agent_workspace
+    - /home/agent/workspace
+    - /var/agent/scratch
+    - /tmp
+  USER_CONFIRM:
+    - /home
+    - /root
+    - /var
+    - /opt
+
+# =============================================================================
 # Capability definitions (documentation)
+# =============================================================================
 capability_definitions:
   file_read:      "Read files from the sandbox"
   file_write:     "Write files to the sandbox"
@@ -112,3 +192,4 @@ capability_definitions:
   config_read:    "Read system configuration"
   config_write:   "Modify system configuration"
   audit_read:     "Read audit logs"
+  task_decompose: "Decompose tasks into subtasks (planner)"

@@ -12,7 +12,8 @@ guardrails:
   audit_logging: true
 
   # Risk thresholds
-  block_at_risk_level: "high"   # low | medium | high | critical
+  approval_threshold: 6.0     # risk_score > this → PendingApprovalException
+  block_threshold: 9.5        # risk_score > this → BlockedActionError (no appeal)
 
   # Input limits
   max_input_length: 50000
@@ -34,9 +35,17 @@ guardrails:
     # Custom block list (add domain-specific sensitive topics)
     custom_blocked_topics: []
 
+  # Command classifier settings
+  command_classifier:
+    llm_model: null            # Set to e.g. "llama3.3" to enable LLM scoring
+    llm_invoke_threshold: 3.0  # Rule score above which LLM is consulted
+    blocklist_enabled: true
+    heuristics_enabled: true
+
   # Prompt injection detection
   prompt_injection:
     enabled: true
+    strict_mode: true          # true = block on any blocking-category match
     patterns:
       - "ignore.*(previous|prior).*instructions"
       - "you are now.*different.*ai"
@@ -45,6 +54,25 @@ guardrails:
       - "pretend you are"
       - "<\\s*system\\s*>"
       - "\\[INST\\]"
+
+  # Network policy
+  network_policy:
+    enabled: true
+    allowed_domains:
+      - api.duckduckgo.com
+      - duckduckgo.com
+      - pypi.org
+      - files.pythonhosted.org
+      - github.com
+      - raw.githubusercontent.com
+      - api.github.com
+      - ollama.local
+      - serpapi.com
+      - huggingface.co
+      - google.com
+      - googleapis.com
+    block_rfc1918: true        # Block private IP ranges (default true)
+    block_tor: true            # Block .onion addresses
 
   # Rate limiting
   rate_limiting:
@@ -55,11 +83,18 @@ guardrails:
 
   # Audit logging
   audit:
+    db_path: "logs/audit.db"
     log_all_requests: true
     log_tool_calls: true
     log_guardrail_violations: true
     hmac_signing: true
     retention_days: 90
+
+  # Undo buffer
+  undo_buffer:
+    enabled: true
+    max_snapshots: 10
+    storage_dir: "~/.agent_undo"
 
   # Sandbox settings
   sandbox:
@@ -69,3 +104,4 @@ guardrails:
     max_cpu_percent: 50
     execution_timeout_seconds: 30
     tmp_size_mb: 64
+    pids_limit: 64
