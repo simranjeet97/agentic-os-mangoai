@@ -1,6 +1,6 @@
-# 🧠 Agentic AI OS
+# 🧠 MangoOS
 
-> A production-grade, self-hosted Agentic AI Operating System powered by LangGraph, FastAPI, Ollama, and a secure multi-agent orchestration engine — running on Ubuntu 24 inside a VM.
+> A production-grade, self-hosted Agentic AI Operating System (MangoOS) powered by LangGraph, FastAPI, Ollama, and a secure multi-agent orchestration engine — running on Ubuntu 24 inside a VM.
 
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue?logo=python)](https://python.org)
 [![Node 20](https://img.shields.io/badge/Node-20-green?logo=node.js)](https://nodejs.org)
@@ -14,7 +14,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Agentic AI OS                                │
+│                           MangoOS                                   │
 │                                                                     │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐  │
 │  │   React UI   │◄──►│  FastAPI +   │◄──►│   Agent Orchestrator │  │
@@ -47,7 +47,7 @@
 ## 📁 Project Structure
 
 ```
-agentic-os/
+mangoos/ (locally agentic-os/)
 ├── core/               # LangGraph orchestration engine
 │   ├── orchestrator.py     # Main agent graph builder
 │   ├── graph_nodes.py      # LangGraph node definitions
@@ -136,7 +136,7 @@ docker-compose up -d
 
 ### 3. Launch the API
 ```bash
-cd agentic-os
+cd agentic-os # (Root directory)
 source .venv/bin/activate
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
