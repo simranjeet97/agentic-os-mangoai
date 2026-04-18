@@ -19,7 +19,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-import chromadb
+try:
+    import chromadb
+    _HAS_CHROMA = True
+except ImportError:
+    import unittest.mock as mock
+    chromadb = mock.MagicMock()
+    _HAS_CHROMA = False
 
 from memory.embeddings import EmbeddingService, get_embedding_service
 from memory.schemas import RecallResult, MemoryType

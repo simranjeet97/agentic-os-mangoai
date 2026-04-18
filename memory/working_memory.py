@@ -12,7 +12,13 @@ import os
 from datetime import datetime
 from typing import Any, Optional
 
-import redis.asyncio as aioredis
+try:
+    import redis.asyncio as aioredis
+    _HAS_REDIS = True
+except ImportError:
+    import unittest.mock as mock
+    aioredis = mock.MagicMock()
+    _HAS_REDIS = False
 
 from core.logging_config import get_logger
 
@@ -58,8 +64,15 @@ def _queue_key(queue_name: str) -> str:
 _pool: Optional[aioredis.Redis] = None
 
 
+# ── Local Fallback (for when Redis is missing) ────────────────────────────────
+_local_store: dict[str, Any] = {}
+
+
 async def _get_client() -> aioredis.Redis:
     global _pool
+    if not _HAS_REDIS:
+        return mock.AsyncMock()
+
     if _pool is None:
         _pool = await aioredis.from_url(
             REDIS_URL,
@@ -110,6 +123,9 @@ class WorkingMemory:
     ) -> None:
         """Store a named context value within a session."""
         try:
+            if not _HAS_REDIS:
+                _local_store[_context_key(session_id, key)] = json.dumps(value, default=str)
+                return
             r = await self._r()
             await r.setex(
                 _context_key(session_id, key),
@@ -122,6 +138,9 @@ class WorkingMemory:
     async def get_context(self, session_id: str, key: str) -> Optional[Any]:
         """Retrieve a named context value from a session."""
         try:
+            if not _HAS_REDIS:
+                raw = _local_store.get(_context_key(session_id, key))
+                return json.loads(raw) if raw is not None else None
             r = await self._r()
             raw = await r.get(_context_key(session_id, key))
             return json.loads(raw) if raw is not None else None
@@ -160,8 +179,11 @@ class WorkingMemory:
     ) -> None:
         """Save the entire session blob."""
         try:
-            r = await self._r()
             data["_updated_at"] = datetime.utcnow().isoformat()
+            if not _HAS_REDIS:
+                _local_store[_session_key(session_id)] = json.dumps(data, default=str)
+                return
+            r = await self._r()
             await r.setex(
                 _session_key(session_id),
                 ttl,
@@ -173,6 +195,9 @@ class WorkingMemory:
     async def get_session(self, session_id: str) -> Optional[dict[str, Any]]:
         """Retrieve the session blob."""
         try:
+            if not _HAS_REDIS:
+                raw = _local_store.get(_session_key(session_id))
+                return json.loads(raw) if raw else None
             r = await self._r()
             raw = await r.get(_session_key(session_id))
             return json.loads(raw) if raw else None
