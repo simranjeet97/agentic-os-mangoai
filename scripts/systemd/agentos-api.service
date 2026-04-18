@@ -1,0 +1,17 @@
+[Unit]
+Description=Agentic AI OS — API Backend
+After=network.target agentos-memory.service agentos-ollama.service agentos-sandbox.service
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__INSTALL_DIR__
+Environment="PATH=__INSTALL_DIR__/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="AGENTOS_CONFIG=__INSTALL_DIR__/config/agentos.yaml"
+ExecStart=__INSTALL_DIR__/.venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+SyslogIdentifier=agentos-api
+
+[Install]
+WantedBy=multi-user.target

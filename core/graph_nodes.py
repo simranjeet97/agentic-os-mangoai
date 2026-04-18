@@ -5,7 +5,6 @@ Each node is a pure async function: AgentState → dict[str, Any]
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import Any
 
@@ -212,7 +211,7 @@ async def _dispatch_to_agent(
         AgentRole.CODE.value: CodeAgent,
     }
 
-    AgentClass = agent_map.get(agent_name, ExecutorAgent)
+    AgentClass: Any = agent_map.get(agent_name, ExecutorAgent)
     agent = AgentClass()
     return await agent.execute(step=step, state=state)
 
@@ -229,7 +228,7 @@ async def memory_save_node(state: AgentState) -> dict[str, Any]:
         await mm.save_context(
             session_id=state["session_id"],
             user_id=state["user_id"],
-            state=state,
+            state=dict(state),
         )
     except Exception as exc:
         logger.warning("Memory save failed", error=str(exc))

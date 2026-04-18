@@ -12,10 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import sqlite3
-import tempfile
-import uuid
 from pathlib import Path
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -41,7 +38,6 @@ from guardrails.models import (
     ActionType,
     AgentAction,
     FileZone,
-    Outcome,
     RiskLevel,
 )
 from guardrails.network_policy import NetworkPolicy

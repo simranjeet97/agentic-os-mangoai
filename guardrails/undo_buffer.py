@@ -10,7 +10,6 @@ Storage: ~/.agent_undo/ (configurable via UNDO_BUFFER_DIR env var)
 from __future__ import annotations
 
 import asyncio
-import gzip
 import json
 import os
 import shutil
@@ -18,7 +17,6 @@ import tarfile
 import tempfile
 import uuid
 from collections import deque
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 

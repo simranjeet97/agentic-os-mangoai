@@ -4,7 +4,7 @@ api/routes/memory.py — Memory query and management endpoints.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -31,10 +31,34 @@ async def query_memory(
     """Semantic search over a user's episodic memory in ChromaDB."""
     try:
         mm = MemoryManager()
-        results = await mm.chroma.search(query=query, user_id=user_id, top_k=top_k)
+        results = await mm.semantic.search(query=query, user_id=user_id, top_k=top_k)
         return {"query": query, "results": results, "count": len(results)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/search", summary="Semantic search over memory")
+async def search_memory(
+    query: str = Query(..., description="Semantic search over user memory"),
+    user_id: str = Query(default="anonymous"),
+    top_k: int = Query(default=10, ge=1, le=50),
+    filters: Optional[str] = Query(None, description="Optional metadata keys to filter")
+):
+    """Semantic search over memory endpoint (re-using query memory backing)."""
+    try:
+        mm = MemoryManager()
+        # Filters could be parsed here in a real implementation
+        filter_dict = None
+        if filters:
+            # Simple assumption it's a comma-separated key=value string
+            try:
+                filter_dict = dict(pair.split("=") for pair in filters.split(","))
+            except:
+                pass
+        results = await mm.semantic.search(query=query, user_id=user_id, top_k=top_k, metadata_filter=filter_dict)
+        return {"query": query, "results": results, "count": len(results)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 @router.delete("/user/{user_id}", summary="Delete all memory for a user")
@@ -42,7 +66,7 @@ async def delete_user_memory(user_id: str):
     """Right-to-be-forgotten: delete all stored memory for a user."""
     try:
         mm = MemoryManager()
-        await mm.chroma.delete_user_memory(user_id)
+        await mm.semantic.delete_document(user_id)
         return {"message": f"Memory deleted for user {user_id}"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

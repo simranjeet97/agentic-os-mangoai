@@ -32,25 +32,31 @@ async def execute_tool(request: ToolRequest):
     logger.info("Direct tool invocation", tool=tool_name, user_id=request.user_id)
 
     try:
+        state: Any = {"user_id": request.user_id, "session_id": "api", "task_id": "api_tool"}
+
         if tool_name == "web_search":
             from agents.web.agent import WebAgent
-            agent = WebAgent()
-            result = await agent._search(params.get("query", ""))
+            web_agent = WebAgent()
+            step = {"action": "search", "query": params.get("query", "")}
+            result = await web_agent.execute(step, state)
             return {"tool": tool_name, "result": result}
 
         elif tool_name == "file_read":
             from agents.file.agent import FileAgent
-            agent = FileAgent()
-            result = await agent._read(params.get("path", ""))
+            file_agent = FileAgent()
+            step = {"action": "read", "path": params.get("path", "")}
+            result = await file_agent.execute(step, state)
             return {"tool": tool_name, "result": result}
 
         elif tool_name == "code_generate":
             from agents.code.agent import CodeAgent
-            agent = CodeAgent()
-            result = await agent._generate_code(
-                params.get("description", ""),
-                params.get("language", "python"),
-            )
+            code_agent = CodeAgent()
+            step = {
+                "action": "generate", 
+                "description": params.get("description", ""), 
+                "language": params.get("language", "python")
+            }
+            result = await code_agent.execute(step, state)
             return {"tool": tool_name, "result": result}
 
         else:

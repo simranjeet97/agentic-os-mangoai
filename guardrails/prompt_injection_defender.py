@@ -16,7 +16,6 @@ from __future__ import annotations
 import re
 import unicodedata
 import urllib.parse
-from typing import Optional
 
 from guardrails.models import SanitizedInput
 

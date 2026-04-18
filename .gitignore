@@ -14,18 +14,39 @@ build/
 .eggs/
 .venv/
 venv/
+venv
 env/
+test_env/
+lib/
 .python-version
 
-# Environment
+# Environment & Secrets
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.cert
+secrets/
 
-# Logs
+# Database & Persistent Data (Local Only)
+*.db
+*.sqlite
+chroma_data/
+redis_data/
+debug_episodic.db
+
+# Logs & Temporary Files
 logs/
 *.log
 *.log.*
+pip_output.txt
+scratch/
+sandbox_tmp/
+
+# Project Specific Artifacts
+artifacts/
+.gemini/
 
 # Node.js / UI
 node_modules/
@@ -37,16 +58,7 @@ ui/dist-electron/
 # Docker
 .docker/
 
-# ChromaDB data
-chroma_data/
-
-# Redis data
-redis_data/
-
-# Sandbox tmp
-sandbox_tmp/
-
-# IDE
+# IDE & OS
 .idea/
 .vscode/
 *.swp
@@ -54,14 +66,9 @@ sandbox_tmp/
 .DS_Store
 Thumbs.db
 
-# Testing
+# Testing & Linting
 .pytest_cache/
 .coverage
 htmlcov/
 .mypy_cache/
 
-# Security — NEVER commit these
-*.pem
-*.key
-*.cert
-secrets/

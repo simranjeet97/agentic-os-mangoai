@@ -1,0 +1,45 @@
+# =============================================================================
+# Agentic AI OS — Master Configuration
+# =============================================================================
+
+llm:
+  provider: "ollama"         # Supported: "ollama", "claude"
+  model: "llama3.2:3b"       # Default execution model
+  embedding_model: "nomic-embed-text"
+  temperature: 0.0           # For deterministic plan generation
+
+guardrails:
+  risk_confirm_threshold: 6.0
+  risk_block_threshold: 9.0
+  enable_content_filter: true
+  max_sandbox_duration_seconds: 30
+
+agents:
+  planner: true
+  executor: true
+  file: true
+  web: true
+  system: true
+  code: true
+  memory: true
+
+memory:
+  working_retention_minutes: 60
+  chroma_retention_days: 90
+  redis_max_connections: 20
+
+file_zones:
+  - path: "/etc"
+    permission: "READONLY"
+  - path: "/tmp/agent_workspace"
+    permission: "AGENT_WRITE"
+  - path: "/home"
+    permission: "USER_CONFIRM"
+  - path: "/var/log"
+    permission: "READONLY"
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  log_level: "INFO"

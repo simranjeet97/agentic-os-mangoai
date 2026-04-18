@@ -22,13 +22,10 @@ Infrastructure:
 
 from __future__ import annotations
 
-import json
-import os
 import tempfile
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -743,7 +740,6 @@ class TestMemoryAgent:
 
     @pytest.mark.asyncio
     async def test_backward_compat_load_context(self, agent):
-        from core.state import AgentState
         ctx = await agent.load_context(
             session_id="compat-sess",
             user_id="compat-user",

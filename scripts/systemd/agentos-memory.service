@@ -1,0 +1,15 @@
+[Unit]
+Description=Agentic AI OS — Memory infrastructure (via Docker Compose)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=__INSTALL_DIR__
+ExecStart=/usr/bin/docker compose up redis chromadb grafana -d
+ExecStop=/usr/bin/docker compose stop redis chromadb grafana
+SyslogIdentifier=agentos-memory
+
+[Install]
+WantedBy=multi-user.target

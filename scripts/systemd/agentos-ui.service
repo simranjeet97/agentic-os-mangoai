@@ -1,0 +1,18 @@
+[Unit]
+Description=Agentic AI OS — Electron Shell
+After=agentos-api.service graphical.target
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__INSTALL_DIR__/ui
+Environment="DISPLAY=:0"
+Environment="PATH=__INSTALL_DIR__/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/npm run dev
+Restart=on-failure
+RestartSec=10
+SyslogIdentifier=agentos-ui
+
+[Install]
+WantedBy=graphical.target

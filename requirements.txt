@@ -19,6 +19,8 @@ websockets==14.2
 httpx==0.28.1
 sse-starlette==2.2.1
 python-multipart==0.0.20
+slowapi==0.1.9
+limits==3.13.0
 
 # ── Authentication & Security ─────────────────────────────────────────────────
 python-jose[cryptography]==3.3.0
@@ -27,7 +29,7 @@ cryptography==44.0.2
 
 # ── Memory & Databases ────────────────────────────────────────────────────────
 redis==5.2.1
-chromadb==0.6.3
+chromadb
 sentence-transformers==3.4.1
 numpy==1.26.4
 aiosqlite==0.22.1
@@ -56,7 +58,7 @@ coverage==7.8.0
 docker==7.1.0
 
 # ── MCP Protocol ─────────────────────────────────────────────────────────────
-mcp==1.6.0
+# mcp==1.6.0  # Requires Python >= 3.10
 
 # ── Configuration & Utilities ─────────────────────────────────────────────────
 pydantic==2.11.2

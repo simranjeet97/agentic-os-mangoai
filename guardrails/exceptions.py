@@ -7,7 +7,6 @@ Raised by GuardrailMiddleware to signal blocked or pending-approval actions.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass

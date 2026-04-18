@@ -14,11 +14,8 @@ Uses Rich for beautiful terminal output and Typer for the CLI framework.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
-from typing import Optional
 
 import typer
-from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -32,9 +29,11 @@ app = typer.Typer(
 )
 console = Console()
 
+from typing import Any
+
 # ── Sample Data ───────────────────────────────────────────────────────────────
 
-SAMPLE_EVENTS = [
+SAMPLE_EVENTS: list[dict[str, Any]] = [
     {
         "event_type": "file_edited",
         "content": "Edited memory/episodic_memory.py to add FTS5 search support",
@@ -88,7 +87,6 @@ async def _build_agent():
     from memory.episodic_memory import EpisodicMemory
     from memory.knowledge_graph import KnowledgeGraph
     from memory.memory_manager import MemoryAgent
-    from memory.schemas import MemoryEvent, EventType
     from memory.working_memory import WorkingMemory
 
     # Use ephemeral ChromaDB for demo (no server needed)

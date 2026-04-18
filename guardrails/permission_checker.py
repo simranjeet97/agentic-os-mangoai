@@ -7,7 +7,6 @@ RBAC for agent types. Loads configuration from config/permissions.yaml.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any, Optional
 

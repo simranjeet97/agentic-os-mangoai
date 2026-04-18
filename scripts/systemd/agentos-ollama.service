@@ -1,0 +1,13 @@
+[Unit]
+Description=Agentic AI OS — Local LLM Server Alias (Ollama)
+Requires=ollama.service
+After=ollama.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+SyslogIdentifier=agentos-ollama
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Agentic AI OS — Sandbox Guard (Docker Daemon)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker info
+SyslogIdentifier=agentos-sandbox
+
+[Install]
+WantedBy=multi-user.target

@@ -6,7 +6,6 @@ Uses keyword rules + LLM fallback for ambiguous cases.
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from pydantic import BaseModel, Field
 
