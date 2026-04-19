@@ -9,27 +9,12 @@ from datetime import datetime
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_ollama import ChatOllama
 
 from core.logging_config import get_logger
 from core.state import AgentState, AgentRole, TaskStatus
+from core.llm_factory import get_llm
 
 logger = get_logger(__name__)
-
-# ── LLM Factory ──────────────────────────────────────────────────────────────
-
-_llm_cache: dict[str, ChatOllama] = {}
-
-def get_llm(model: str = "llama3.2:3b", temperature: float = 0.0) -> ChatOllama:
-    """Return a cached ChatOllama instance."""
-    key = f"{model}:{temperature}"
-    if key not in _llm_cache:
-        _llm_cache[key] = ChatOllama(
-            model=model,
-            temperature=temperature,
-            base_url="http://localhost:11434",
-        )
-    return _llm_cache[key]
 
 
 # ── Node: Guardrail Check ────────────────────────────────────────────────────
@@ -55,9 +40,29 @@ async def guardrail_node(state: AgentState) -> dict[str, Any]:
         logger.warning("Guardrail evaluation failed, defaulting to pass", error=str(exc))
         guardrail_dict = {"passed": True, "risk_level": "low", "violations": [], "recommendations": []}
 
+    requires_approval = not guardrail_dict.get("passed", True)
+    action_id = None
+    
+    if requires_approval:
+        import uuid
+        from api.state import pending_approvals
+        action_id = str(uuid.uuid4())
+        pending_approvals[action_id] = {
+            "task_id": state["task_id"],
+            "session_id": state["session_id"],
+            "agent": "guardian",
+            "command": state["user_input"],
+            "risk_score": {"low": 2, "medium": 5, "high": 8, "critical": 10}.get(guardrail_dict.get("risk_level"), 5),
+            "impact": guardrail_dict.get("blocked_reason") or "Potential security or safety violation.",
+            "warnings": guardrail_dict.get("violations", []),
+            "status": "pending"
+        }
+        logger.info("Approval required", action_id=action_id)
+
     return {
         "guardrail_result": guardrail_dict,
-        "requires_approval": not guardrail_dict.get("passed", True),
+        "requires_approval": requires_approval,
+        "action_id": action_id,
         "status": TaskStatus.PLANNING.value if guardrail_dict.get("passed") else TaskStatus.WAITING.value,
         "updated_at": datetime.utcnow().isoformat(),
     }

@@ -16,6 +16,7 @@ Every command is gated through GuardrailMiddleware before execution:
 
 from __future__ import annotations
 
+import asyncio
 import shlex
 from typing import Any, Optional
 
@@ -69,6 +70,16 @@ concise 1-3 sentence explanation of what happened. Focus on the key outcome,
 any errors, and what the output means.
 """
 
+REASON_PROMPT = """\
+You are an AI Research Analyst. Given background context and a requested task, perform the task (e.g., summarize, analyze, or synthesize information).
+
+Rules for output:
+1. **Formatting**: Use clean, professional Markdown. Use `###` for headers, `**` for emphasis, and `-` or `1.` for lists.
+2. **Structure**: Start with a high-level summary, followed by themed sections if appropriate.
+3. **Citations**: If URLs or titles are present in the context, include them in your synthesis.
+4. **Clarity**: Be concise but comprehensive. Avoid fluff.
+"""
+
 
 class ExecutorAgent(BaseAgent):
     name = "executor"
@@ -84,7 +95,7 @@ class ExecutorAgent(BaseAgent):
     @property
     def llm(self) -> Any:
         if self._llm is None:
-            self._llm = self._get_llm("OLLAMA_CODE_MODEL", temperature=0.0)
+            self._llm = self._get_llm(temperature=0.0)
         return self._llm
 
     @property
@@ -101,15 +112,23 @@ class ExecutorAgent(BaseAgent):
         state: AgentState,
     ) -> dict[str, Any]:
         async def _run() -> dict[str, Any]:
-            action = step.get("action", "execute")
+            action = step.get("action", "execute").lower()
 
-            if action in ("execute", "run"):
+            if action in ("execute", "run", "code"):
                 return await self._safe_execute(step, state)
             elif action == "explain":
                 return await self._explain_execution(step)
+            elif action in ("summarize", "analyze", "reason", "synthesis"):
+                return await self._llm_reason(step, state)
             else:
-                # Default: treat description as a command to run
-                return await self._safe_execute(step, state)
+                # Default: If description looks like a command, try to run it.
+                # Otherwise, if it's natural language, reason about it.
+                desc = step.get("description", "")
+                if any(cmd in desc.lower() for cmd in ["ls", "cat ", "grep ", "mkdir ", "chmod "]) or \
+                   ("import " in desc and ":" in desc):
+                    return await self._safe_execute(step, state)
+                
+                return await self._llm_reason(step, state)
 
         return await self._run_with_audit(step, state, _run)
 
@@ -212,9 +231,10 @@ class ExecutorAgent(BaseAgent):
                 "timed_out": sr.timed_out,
             }
 
-        # Add LLM explanation
+        # Add LLM explanation and populate mandatory output field
         explanation = await self._generate_explanation(code, result)
         result["explanation"] = explanation
+        result["output"] = result.get("stdout") or explanation
 
         self.logger.info(
             "Code executed",
@@ -254,6 +274,34 @@ class ExecutorAgent(BaseAgent):
             code, {"stdout": stdout, "stderr": stderr, "exit_code": exit_code}
         )
         return {"explanation": explanation, "step_type": "explain", "output": explanation}
+
+    async def _llm_reason(self, step: dict[str, Any], state: AgentState) -> dict[str, Any]:
+        """Use LLM to perform a high-level task like summarization or analysis."""
+        description = step.get("description", "")
+        
+        # Context from previous results
+        context_parts = []
+        for res in state.get("tool_results", []):
+            res_data = res.get("result", {})
+            output = res_data.get("output") or res_data.get("error") or str(res_data)
+            context_parts.append(f"Result from {res['agent']} (Step {res['step_id']}):\n{output}")
+        
+        context = "\n\n".join(context_parts)
+        
+        try:
+            messages = [
+                SystemMessage(content=REASON_PROMPT),
+                HumanMessage(content=f"Context:\n{context}\n\nTask: {description}"),
+            ]
+            response = await self.llm.ainvoke(messages)
+            output = response.content.strip()
+            return {
+                "success": True,
+                "output": output,
+                "step_type": "reason"
+            }
+        except Exception as exc:
+            return {"success": False, "error": f"LLM reasoning failed: {exc}"}
 
     async def _generate_explanation(
         self,

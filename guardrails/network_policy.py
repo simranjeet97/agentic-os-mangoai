@@ -39,6 +39,8 @@ _DEFAULT_ALLOWED_DOMAINS = [
     "google.com",
     "googleapis.com",
     "huggingface.co",
+    "api.tavily.com",
+    "tavily.com",
 ]
 
 # RFC 1918 private ranges + loopback + link-local

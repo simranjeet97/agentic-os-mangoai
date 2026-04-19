@@ -51,6 +51,15 @@ export default function Layout({ activeView, setActiveView, isRunning, children 
             <div className="text-xs text-text-muted">Agent execution in progress...</div>
           </div>
         )}
+        
+        {!isRunning && activeView === 'shell' && (
+          <div className="p-4 m-4 rounded-lg bg-accent-red/5 border border-accent-red/20">
+             <div className="flex items-center gap-2 text-xs font-semibold text-accent-red mb-2 uppercase tracking-wider">
+              <Shield size={14}/> NEEDS ATTENTION
+            </div>
+            <div className="text-xs text-text-muted">Review pending action requests.</div>
+          </div>
+        )}
       </nav>
 
       {/* Main Content */}

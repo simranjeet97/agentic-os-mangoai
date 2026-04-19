@@ -53,18 +53,36 @@ roles:
       max_concurrent_tasks: 5
 
   user:
-    description: "Standard user — full research and code generation"
+    description: "Standard user — full capabilities with safety guardrails"
     capabilities:
       - file_read
-      - web_browse
-      - web_search
+      - file_write
+      - file_delete
+      - shell_exec
+      - docker_run
+      - code_execute
       - code_generate
       - code_lint
+      - code_test
+      - web_browse
+      - web_search
       - memory_read
+      - memory_write
       - task_decompose
+      - process_list
+      - process_spawn
+      - process_kill
+      - config_read
+      - config_write
+      - planner
+      - executor
+      - file
+      - web
+      - code
+      - system
     rate_limits:
-      requests_per_minute: 60
-      max_concurrent_tasks: 3
+      requests_per_minute: 100
+      max_concurrent_tasks: 5
 
   readonly:
     description: "Read-only access for monitoring and inspection"
@@ -85,21 +103,76 @@ roles:
       max_concurrent_tasks: 1
 
   default:
-    description: "Default role when no role is specified"
+    description: "Default role — full OS capabilities for the primary user"
     capabilities:
       - file_read
-      - web_search
+      - file_write
+      - file_delete
+      - shell_exec
+      - docker_run
+      - code_execute
       - code_generate
+      - code_lint
+      - code_test
+      - web_browse
+      - web_search
       - memory_read
+      - memory_write
+      - task_decompose
+      - process_list
+      - process_spawn
+      - process_kill
+      - config_read
+      - config_write
+      - planner
+      - executor
+      - file
+      - web
+      - code
+      - system
     rate_limits:
-      requests_per_minute: 30
-      max_concurrent_tasks: 2
+      requests_per_minute: 100
+      max_concurrent_tasks: 10
 
 # =============================================================================
 # Agent type RBAC (used by PermissionChecker)
 # Maps agent_type strings to allowed capabilities
 # =============================================================================
 agent_roles:
+  planner:            # Alias for planner_agent
+    - memory_read
+    - memory_write
+    - task_decompose
+    - web_search
+  executor:           # Alias for executor_agent
+    - shell_exec
+    - docker_run
+    - file_write
+    - code_execute
+    - memory_read
+    - memory_write
+  file:               # Alias for file_agent
+    - file_read
+    - file_write
+    - file_delete
+    - memory_read
+  web:                # Alias for web_agent
+    - web_browse
+    - web_search
+    - memory_read
+    - memory_write
+  system:             # Alias for system_agent
+    - shell_exec
+    - process_list
+    - process_kill
+    - config_read
+  code:               # Alias for code_agent
+    - code_generate
+    - code_execute
+    - code_lint
+    - code_test
+    - file_read
+    - file_write
   planner_agent:
     - memory_read
     - memory_write
@@ -136,9 +209,16 @@ agent_roles:
     - file_write
   default:
     - file_read
+    - file_write
+    - file_delete
+    - shell_exec
+    - web_browse
     - web_search
     - code_generate
+    - code_execute
     - memory_read
+    - memory_write
+    - task_decompose
 
 # =============================================================================
 # File Zones (used by PermissionChecker)

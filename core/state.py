@@ -122,6 +122,7 @@ def create_initial_state(
     user_id: str = "anonymous",
     session_id: Optional[str] = None,
     metadata: Optional[dict] = None,
+    history: Optional[list[AnyMessage]] = None,
 ) -> AgentState:
     """Create a fresh AgentState for a new task."""
     now = datetime.utcnow().isoformat()
@@ -129,7 +130,7 @@ def create_initial_state(
         task_id=str(uuid.uuid4()),
         session_id=session_id or str(uuid.uuid4()),
         user_id=user_id,
-        messages=[],
+        messages=history or [],
         user_input=user_input,
         goal=user_input,
         plan=[],

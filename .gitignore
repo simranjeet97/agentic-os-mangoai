@@ -71,4 +71,18 @@ Thumbs.db
 .coverage
 htmlcov/
 .mypy_cache/
+.eslintcache
 
+# Generated Artifacts
+reports/
+*.txt
+!README.md
+!requirements.txt
+
+# Local / Secret Overrides
+docker-compose.override.yml
+*.local.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

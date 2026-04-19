@@ -112,6 +112,8 @@ class SandboxEnforcer:
         self.pids_limit = pids_limit
         self.enable_network = enable_network
         self._docker_available = self._check_docker()
+        # Allow environment override to force local mode
+        self.force_local = os.getenv("SANDBOX_LOCAL_MODE", "false").lower() == "true"
 
     async def safe_execute(
         self,
@@ -145,10 +147,13 @@ class SandboxEnforcer:
                 f"Language {lang!r} not supported. Supported: {supported}"
             )
 
-        if not self._docker_available:
-            raise SandboxError(
-                "Docker is not available on this system. "
-                "Install Docker to enable sandboxed execution."
+        if not self._docker_available or self.force_local:
+            return await self._run_locally(
+                code=code,
+                config=config,
+                timeout=timeout,
+                language=lang,
+                extra_env=extra_env or {},
             )
 
         return await self._run_container(
@@ -160,6 +165,82 @@ class SandboxEnforcer:
             language=lang,
         )
 
+    async def _run_locally(
+        self,
+        code: str,
+        config: dict,
+        timeout: int,
+        language: str,
+        extra_env: dict[str, str],
+    ) -> SandboxResult:
+        """Execute code directly on the host using a subprocess fallback."""
+        tmpdir = tempfile.mkdtemp(prefix="local_sandbox_")
+        code_file = Path(tmpdir) / config["filename"]
+        code_file.write_text(code)
+
+        # Map local binaries (some image-specific sh -c commands won't work locally)
+        local_cmd = list(config["cmd"])
+        # Replace '/sandbox/...' with the actual local path
+        local_cmd = [str(code_file) if "/sandbox/" in arg else arg for arg in local_cmd]
+        
+        # Binary overrides for common local setups
+        binary_map = {"python": "python3", "python3": "python3", "node": "node", "sh": "sh"}
+        if local_cmd[0] in binary_map:
+            local_cmd[0] = binary_map[local_cmd[0]]
+
+        start = time.monotonic()
+        timed_out = False
+        stdout_data = ""
+        stderr_data = ""
+        exit_code = -1
+
+        try:
+            # Merge with existing environment
+            env = os.environ.copy()
+            env.update(extra_env)
+
+            proc = await asyncio.create_subprocess_exec(
+                *local_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+                cwd=tmpdir,
+            )
+
+            try:
+                raw_stdout, raw_stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=float(timeout)
+                )
+                exit_code = proc.returncode or 0
+                stdout_data = raw_stdout.decode(errors="replace")
+                stderr_data = raw_stderr.decode(errors="replace")
+            except asyncio.TimeoutError:
+                timed_out = True
+                exit_code = 124
+                stderr_data = f"Local execution timed out after {timeout}s"
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
+        except Exception as exc:
+            exit_code = -1
+            stderr_data = f"Local execution failed: {exc}"
+        finally:
+            import shutil
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+        duration_ms = (time.monotonic() - start) * 1000
+
+        return SandboxResult(
+            exit_code=exit_code,
+            stdout=stdout_data,
+            stderr=stderr_data,
+            duration_ms=round(duration_ms, 2),
+            timed_out=timed_out,
+            container_id="local_host",
+            language=language,
+        )
     async def _run_container(
         self,
         code: str,

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -93,6 +94,7 @@ class WebAgent(BaseAgent):
                 "links": self._get_links,
                 "search_google": self._search_google,
                 "search_duckduckgo": self._search_duckduckgo,
+                "search_tavily": self._search_tavily,
             }
             handler = dispatch.get(action, self._browse_url)
             return await handler(step, state)
@@ -317,10 +319,15 @@ class WebAgent(BaseAgent):
         step: dict[str, Any],
         state: AgentState,
     ) -> dict[str, Any]:
-        engine = step.get("engine", "duckduckgo").lower()
+        engine = step.get("engine", "tavily").lower()
         if engine == "google":
             return await self._search_google(step, state)
-        return await self._search_duckduckgo(step, state)
+        if engine == "tavily":
+            return await self._search_tavily(step.get("query", ""), int(step.get("max_results", 10)))
+        if engine == "duckduckgo":
+            return await self._search_duckduckgo(step, state)
+        # Default fallback priority: Tavily -> DuckDuckGo -> Browser
+        return await self._search_google(step, state)
 
     async def _search_duckduckgo(
         self,
@@ -338,11 +345,14 @@ class WebAgent(BaseAgent):
             
             results = []
             max_retries = 3
+            # Use a longer timeout (60s) for reliability
+            timeout = 60
+            
             for attempt in range(max_retries):
                 try:
                     loop = asyncio.get_event_loop()
                     def _do_search():
-                        with DDGS(timeout=25) as ddgs:
+                        with DDGS(timeout=timeout) as ddgs:
                             return list(ddgs.text(query, max_results=max_results))
                     
                     results = await loop.run_in_executor(None, _do_search)
@@ -350,9 +360,11 @@ class WebAgent(BaseAgent):
                         break
                 except Exception as e:
                     err_str = str(e).lower()
-                    if ("timeout" in err_str or "parsing" in err_str) and attempt < max_retries - 1:
+                    # Catch connection timeouts specifically
+                    if ("timeout" in err_str or "parsing" in err_str or "connection" in err_str) and attempt < max_retries - 1:
                         self.logger.warning(f"DuckDuckGo search error (attempt {attempt+1}/{max_retries}), retrying...", error=str(e))
-                        await asyncio.sleep(1.5)
+                        # Exponential backoff
+                        await asyncio.sleep(2 ** attempt)
                         continue
                     raise e
 
@@ -384,8 +396,69 @@ class WebAgent(BaseAgent):
         if not query:
             return {"success": False, "error": "No search query provided"}
 
+        # 1. Try Tavily first (Best AI Search)
+        if os.getenv("TAVILY_API_KEY"):
+            try:
+                self.logger.info("Using Tavily as Google Search API fallback", query=query)
+                return await self._search_tavily(query, max_results)
+            except Exception as e:
+                self.logger.warning("Tavily search failed, falling back to browser", error=str(e))
+
+        # 2. Fallback: Browser Scrape
         url = f"https://www.google.com/search?q={query.replace(' ', '+')}&num={max_results}"
         return await self._browser_search(url, state, query=query)
+
+    async def _search_tavily(self, query: str, max_results: int = 5) -> dict[str, Any]:
+        """Perform search via Tavily API (HTTP REST)."""
+        api_key = os.getenv("TAVILY_API_KEY")
+        if not api_key:
+            return {"success": False, "error": "TAVILY_API_KEY not found in environment"}
+
+        self.logger.info(f"Tavily searching: {query}")
+        import httpx
+        url = "https://api.tavily.com/search"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "query": query,
+            "search_depth": "advanced",
+            "max_results": max_results,
+            "include_answer": True
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+
+                results = data.get("results", [])
+                answer = data.get("answer")
+                
+                output_parts = []
+                if answer:
+                    output_parts.append(f"Tavily Answer: {answer}")
+                
+                output_parts.append(f"Found {len(results)} sources:")
+                for r in results[:5]:  # Include top 5 in string output
+                    output_parts.append(f"- {r.get('title')}: {r.get('url')}\n  {r.get('content')[:200]}...")
+
+                output = "\n".join(output_parts)
+
+                return {
+                    "success": True,
+                    "output": output,
+                    "results": results,
+                    "answer": answer,
+                    "query": query,
+                    "engine": "tavily",
+                    "step_type": "search"
+                }
+        except Exception as exc:
+            self.logger.error("Tavily API request failed", error=str(exc))
+            return {"success": False, "error": f"Tavily error: {exc}"}
 
     async def _browser_search(
         self,

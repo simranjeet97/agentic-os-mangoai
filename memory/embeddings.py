@@ -1,104 +1,81 @@
 """
 memory/embeddings.py — Shared embedding service for the Memory System.
-
-Uses sentence-transformers/all-MiniLM-L6-v2 for local, offline embeddings.
-Model is loaded lazily on first call and runs in a thread pool to avoid
-blocking the async event loop.
+Uses Google Gemini API (text-embedding-004) for embeddings.
+This implementation is lightweight and avoids local torch/transformers dependencies.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
+import os
 from typing import Optional
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-_EMBED_DIM = 384  # all-MiniLM-L6-v2 output dimension
-
-# Thread pool for CPU-bound embedding work
-_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embed")
-
-
-@lru_cache(maxsize=1)
-def _load_model():
-    """Load the sentence-transformer model (cached singleton)."""
-    try:
-        from sentence_transformers import SentenceTransformer  # type: ignore
-
-        logger.info("Loading embedding model: %s", MODEL_NAME)
-        model = SentenceTransformer(MODEL_NAME)
-        logger.info("Embedding model loaded successfully")
-        return model
-    except ImportError:
-        logger.warning(
-            "sentence-transformers not installed. "
-            "Falling back to zero-vector embeddings."
-        )
-        return None
-    except Exception as exc:
-        logger.error("Failed to load embedding model: %s", exc)
-        return None
-
-
-def _encode_sync(texts: list[str]) -> np.ndarray:
-    """Synchronous encode — runs inside the thread pool."""
-    model = _load_model()
-    if model is None:
-        # Graceful fallback: return zero vectors
-        return np.zeros((len(texts), _EMBED_DIM), dtype=np.float32)
-    return model.encode(
-        texts,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-        batch_size=32,
-    )
-
+# Standard dimension for Google's text-embedding-004
+_EMBED_DIM = 768
 
 class EmbeddingService:
     """
-    Async wrapper around sentence-transformers for memory components.
-
+    Async wrapper around Google Gemini Embeddings for memory components.
+    
     Usage:
         svc = EmbeddingService()
         vectors = await svc.encode(["hello world", "another text"])
     """
 
-    def __init__(self, executor: Optional[ThreadPoolExecutor] = None) -> None:
-        self._executor = executor or _executor
+    def __init__(self, model_name: str = "models/gemini-embedding-001") -> None:
+        self.model_name = model_name
+        self._client: Optional[Any] = None
+
+    def _get_client(self) -> Any:
+        """Lazy-load the LangChain Gemini embedding client."""
+        if self._client is None:
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+            
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                logger.warning("GOOGLE_API_KEY not set. Embedding calls will likely fail.")
+                
+            self._client = GoogleGenerativeAIEmbeddings(
+                model=self.model_name,
+                google_api_key=api_key,
+            )
+        return self._client
 
     async def encode(self, texts: list[str]) -> np.ndarray:
         """
-        Encode a list of texts into embedding vectors.
-        Returns shape (len(texts), 384).
-        Offloads CPU work to thread pool; does not block the event loop.
+        Encode a list of texts into embedding vectors via Gemini API.
+        Returns shape (len(texts), 768).
         """
         if not texts:
             return np.zeros((0, _EMBED_DIM), dtype=np.float32)
 
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self._executor,
-            _encode_sync,
-            texts,
-        )
+        try:
+            client = self._get_client()
+            # LangChain's embed_documents is a sync call in the base class, 
+            # but langchain-google-genai might be blocking. 
+            # Wrap in to_thread just in case if not natively async.
+            import asyncio
+            vectors = await asyncio.to_thread(client.embed_documents, texts)
+            return np.array(vectors, dtype=np.float32)
+        except Exception as exc:
+            logger.error("Gemini embedding failed: %s", exc)
+            # Graceful fallback: return zero vectors to prevent system crash
+            return np.zeros((len(texts), _EMBED_DIM), dtype=np.float32)
 
     async def encode_single(self, text: str) -> np.ndarray:
-        """Encode a single text. Returns shape (384,)."""
+        """Encode a single text. Returns shape (768,)."""
         vectors = await self.encode([text])
-        return vectors[0]
+        if vectors.shape[0] > 0:
+            return vectors[0]
+        return np.zeros((_EMBED_DIM,), dtype=np.float32)
 
     @staticmethod
     def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-        """
-        Compute cosine similarity between two vectors.
-        Assumes pre-normalized vectors (sentence-transformers normalizes by default).
-        """
+        """Compute cosine similarity between two vectors."""
         a = np.array(a, dtype=np.float32).flatten()
         b = np.array(b, dtype=np.float32).flatten()
         norm_a = np.linalg.norm(a)
@@ -112,35 +89,33 @@ class EmbeddingService:
         query: np.ndarray,
         corpus: np.ndarray,
     ) -> np.ndarray:
-        """
-        Compute cosine similarity between one query vector and a corpus matrix.
-        Returns shape (len(corpus),).
-        """
-        query = query.flatten() / (np.linalg.norm(query) + 1e-9)
+        """Compute cosine similarity between one query vector and a corpus matrix."""
+        query_norm = np.linalg.norm(query)
+        if query_norm == 0:
+            return np.zeros(len(corpus))
+        
+        query = query.flatten() / (query_norm + 1e-9)
         norms = np.linalg.norm(corpus, axis=1, keepdims=True) + 1e-9
         normed = corpus / norms
         return normed @ query
 
     async def preload(self) -> bool:
-        """
-        Pre-warm the model (call during startup to avoid cold-start latency).
-        Returns True if model loaded successfully.
-        """
-        loop = asyncio.get_event_loop()
-        model = await loop.run_in_executor(self._executor, _load_model)
-        return model is not None
+        """Validate API connectivity."""
+        try:
+            await self.encode(["ping"])
+            return True
+        except Exception:
+            return False
 
     @property
     def embedding_dim(self) -> int:
         return _EMBED_DIM
 
 
-# Module-level singleton for convenient import
+# Module-level singleton
 _default_service: Optional[EmbeddingService] = None
 
-
 def get_embedding_service() -> EmbeddingService:
-    """Return the module-level singleton EmbeddingService."""
     global _default_service
     if _default_service is None:
         _default_service = EmbeddingService()

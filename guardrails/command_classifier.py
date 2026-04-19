@@ -111,6 +111,9 @@ _HEURISTICS: list[tuple[str, float, str]] = [
     # write to /proc or /sys
     (r">\s*/proc/", 2.5, "write to /proc"),
     (r">\s*/sys/", 2.5, "write to /sys"),
+    # General destructive commands (force approval)
+    (r"\brm\b", 6.5, "general file removal"),
+    (r"\b(?:mkfs|mke2fs|fdisk|parted)\b", 7.0, "disk partition/format tool"),
 ]
 
 _SAFE_COMMANDS = {

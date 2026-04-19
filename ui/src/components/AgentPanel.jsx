@@ -5,7 +5,7 @@ const AGENTS = [
   { id: 'planner', name: 'Strategic Planner', icon: Brain, color: 'text-accent-primary', bg: 'bg-accent-primary', status: 'idle' },
   { id: 'executor', name: 'Task Executor', icon: Zap, color: 'text-accent-cyan', bg: 'bg-accent-cyan', status: 'running' },
   { id: 'file', name: 'File System', icon: Folder, color: 'text-accent-orange', bg: 'bg-accent-orange', status: 'idle' },
-  { id: 'web', name: 'Web Research', icon: Globe, color: 'text-accent-yellow', bg: 'bg-accent-yellow', status: 'error' },
+  { id: 'web', name: 'Web Research', icon: Globe, color: 'text-accent-yellow', bg: 'bg-accent-yellow', status: 'idle' },
   { id: 'system', name: 'Native System OS', icon: Terminal, color: 'text-accent-green', bg: 'bg-accent-green', status: 'idle' },
   { id: 'code', name: 'Software Engineer', icon: Code, color: 'text-accent-primary', bg: 'bg-accent-primary', status: 'idle' },
 ]
@@ -65,7 +65,7 @@ function AgentCard({ agent, delay }) {
       {agent.status === 'error' && (
         <div className="mt-6 pt-4 border-t border-border flex gap-2 items-start text-accent-red">
           <ShieldAlert size={14} className="mt-0.5 flex-shrink-0" />
-          <p className="text-xs">Connection timeout parsing duckduckgo results.</p>
+          <p className="text-xs">{agent.error || "Agent is ready for connection."}</p>
         </div>
       )}
     </motion.div>

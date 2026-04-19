@@ -68,7 +68,7 @@ class ParsedIntent(BaseModel):
 # ── Heuristic fast-path patterns ─────────────────────────────────────────────
 
 _SYSTEM_QUERY_PATTERNS = re.compile(
-    r"\b(status|health|ping|list agents?|show tasks?|what are you|who are you"
+    r"\b(system status|agent status|health check|ping system|list agents?|show tasks?|who are you"
     r"|what can you do|help|version|uptime|running tasks?)\b",
     re.IGNORECASE,
 )
@@ -97,6 +97,9 @@ _AGENT_KEYWORD_MAP: dict[str, str] = {
     "web": AgentRole.WEB.value,
     "internet": AgentRole.WEB.value,
     "google": AgentRole.WEB.value,
+    "tavily": AgentRole.WEB.value,
+    "latest": AgentRole.WEB.value,
+    "news": AgentRole.WEB.value,
     "run": AgentRole.SYSTEM.value,
     "execute": AgentRole.EXECUTOR.value,
     "shell": AgentRole.SYSTEM.value,
@@ -142,49 +145,62 @@ def _heuristic_complexity(text: str, agent_count: int) -> int:
 
 _LLM_SYSTEM_PROMPT = """\
 You are an intent classifier inside an Agentic AI OS.
-Analyse the user's input and return ONLY valid JSON (no markdown, no explanation).
-
-Schema:
-{
-  "intent_type": "SINGLE_AGENT_TASK | MULTI_AGENT_TASK | CLARIFICATION_NEEDED | SYSTEM_QUERY | CONVERSATION",
-  "intent": "<one-sentence summary of what the user wants>",
-  "required_agents": ["<agent-role>"],   // subset of: planner, executor, file, web, system, code
-  "urgency": <1-5>,
-  "estimated_complexity": <1-10>,
-  "clarification_question": "<question to ask if CLARIFICATION_NEEDED, else null>"
-}
+Analyse the user's input AND the recent conversation history to determine the intent.
 
 Rules:
-- Use MULTI_AGENT_TASK only when two or more distinct skills are genuinely required.
-- Use CLARIFICATION_NEEDED when the request is ambiguous and cannot proceed safely.
-- urgency 5 = critical/blocking; 1 = whenever.
-- estimated_complexity 1 = trivial; 10 = research-grade multi-day project.
+1. **Decisiveness**: If a request contains a minor ambiguity, use logical context to resolve it with a default assumption (e.g., assume a 4-digit number is a year if relevant to the topic) instead of asking for clarification.
+2. **Contextual Memory**: Use the provided conversation history to resolve pronouns ("it", "they") or follow-up requests (e.g., if the user previously searched for papers and now says "2026 year", assume they mean "papers from 2026").
+3. **Intent Types**:
+   - SINGLE_AGENT_TASK | MULTI_AGENT_TASK
+   - CLARIFICATION_NEEDED: Only use if the request is high-risk or truly nonsensical even with history.
+   - SYSTEM_QUERY: Introspection/health checks.
+   - CONVERSATION: Casual chat/greetings.
+
+Return ONLY valid JSON:
+{
+  "intent_type": "...",
+  "intent": "<one-sentence summary>",
+  "required_agents": ["<agent-role>"],
+  "urgency": <1-5>,
+  "estimated_complexity": <1-10>,
+  "clarification_question": "<question if CLARIFICATION_NEEDED, else null>"
+}
 """
 
 
-async def _llm_parse(text: str) -> Optional[dict[str, Any]]:
+async def _llm_parse(text: str, history: Optional[list[dict[str, Any]]] = None) -> Optional[dict[str, Any]]:
     """Call the LLM to produce a structured intent dict. Returns None on failure."""
     try:
-        from langchain_ollama import ChatOllama
-        from langchain_core.messages import HumanMessage, SystemMessage
-        import os
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+        from core.llm_factory import get_llm
 
-        llm = ChatOllama(
-            model=os.getenv("OLLAMA_DEFAULT_MODEL", "llama3.2:3b"),
-            temperature=0.0,
-            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        )
-        response = await llm.ainvoke([
-            SystemMessage(content=_LLM_SYSTEM_PROMPT),
-            HumanMessage(content=f"User input: {text}"),
-        ])
+        llm = get_llm(temperature=0.0)
+        messages = [SystemMessage(content=_LLM_SYSTEM_PROMPT)]
+
+        # Add history if present
+        if history:
+            for turn in history[-5:]:  # Last 5 turns for context
+                role = turn.get("role")
+                content = turn.get("content")
+                if role == "user":
+                    messages.append(HumanMessage(content=content))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=content))
+
+        messages.append(HumanMessage(content=f"User input: {text}"))
+
+        response = await llm.ainvoke(messages)
         raw = response.content.strip()
         # Strip markdown code fences if present
         raw = re.sub(r"^```(?:json)?\n?", "", raw)
         raw = re.sub(r"\n?```$", "", raw)
         return json.loads(raw)
     except Exception as exc:
-        logger.warning("LLM intent parse failed", error=str(exc))
+        logger.warning(
+            "LLM intent parse failed — falling back to heuristics",
+            error=str(exc),
+            input_preview=text[:100]
+        )
         return None
 
 
@@ -205,7 +221,7 @@ class IntentParser:
     def __init__(self, use_llm: bool = True) -> None:
         self.use_llm = use_llm
 
-    async def parse(self, text: str) -> ParsedIntent:
+    async def parse(self, text: str, history: Optional[list[dict[str, Any]]] = None) -> ParsedIntent:
         """Parse user input and return a rich ParsedIntent."""
         text = text.strip()
         logger.debug("Parsing intent", input_preview=text[:80])
@@ -234,7 +250,7 @@ class IntentParser:
         # ── LLM pass ─────────────────────────────────────────────────────────
         llm_result: Optional[dict[str, Any]] = None
         if self.use_llm:
-            llm_result = await _llm_parse(text)
+            llm_result = await _llm_parse(text, history=history)
 
         if llm_result:
             try:

@@ -51,7 +51,13 @@ async def parse_intent_node(state: AgentState) -> dict[str, Any]:
     from core.intent_parser import IntentParser
 
     parser = IntentParser(use_llm=True)
-    parsed = await parser.parse(state["user_input"])
+    # Use messages from state as history
+    history = []
+    for msg in state.get("messages", [])[-10:]:
+        role = "user" if isinstance(msg, HumanMessage) else "assistant"
+        history.append({"role": role, "content": msg.content})
+
+    parsed = await parser.parse(state["user_input"], history=history)
 
     metadata = dict(state.get("metadata", {}))
     metadata.update({
@@ -87,18 +93,28 @@ async def parse_intent_node(state: AgentState) -> dict[str, Any]:
 _ROUTE_SYSTEM_PROMPT = """\
 You are the Planner inside an Agentic AI OS.
 Decompose the user's goal into an ordered list of steps.
-Each step must specify:
-  - step_id  (short unique id, e.g. "s1")
-  - description (what to do)
-  - agent  (one of: planner, executor, file, web, system, code)
-  - dependencies (list of step_ids this step requires, empty list if none)
 
-Return ONLY valid JSON:
+Rules:
+1. **Decisiveness**: Be autonomous. If the goal is slightly ambiguous, use the conversation history to choose the most likely interpretation and proceed.
+2. **Context**: Use the provided conversation history to understand references to previous tasks or results.
+3. **Agent Roles**: You MUST only use the following roles for the "agent" field:
+   - **web**: For searching the internet, browsing websites, and retrieving online information.
+   - **file**: For reading, writing, and managing local files.
+   - **code**: For generating, linting, and executing Python code.
+   - **system**: For executing shell commands and system-level operations.
+   - **executor**: For general-purpose tasks or summarizing results.
+   - **planner**: For complex multi-step planning or sub-task decomposition.
+4. **Research Rules**: For research or information retrieval tasks:
+   - Always request titles and URLs.
+   - Use the `web` agent first, then use the `executor` agent with the `action: "summarize"` to synthesize the results.
+5. **Output**: Return ONLY valid JSON.
+
+Schema:
 {
   "goal_summary": "...",
   "steps": [
-    {"step_id": "s1", "description": "...", "agent": "web", "dependencies": []},
-    {"step_id": "s2", "description": "...", "agent": "file", "dependencies": ["s1"]}
+    {"step_id": "s1", "description": "Search for...", "agent": "web", "action": "search", "query": "...", "dependencies": []},
+    {"step_id": "s2", "description": "Summarize findings from s1 with titles and URLs", "agent": "executor", "action": "summarize", "dependencies": ["s1"]}
   ]
 }
 """
@@ -115,10 +131,14 @@ async def route_to_agent_node(state: AgentState) -> dict[str, Any]:
 
     # ── Short-circuit for non-task intents ────────────────────────────────────
     if intent_type in ("CONVERSATION", "SYSTEM_QUERY"):
+        from agents.router import get_router
+        router = get_router()
+        agent_role = await router.classify(state["user_input"])
+        
         plan = [{
             "step_id": "s1",
             "description": state["user_input"],
-            "agent": "executor",
+            "agent": agent_role,
             "dependencies": [],
         }]
         return {
@@ -139,14 +159,10 @@ async def route_to_agent_node(state: AgentState) -> dict[str, Any]:
 
     # ── LLM planning ──────────────────────────────────────────────────────────
     import json, re, os
-    from langchain_ollama import ChatOllama
+    from core.llm_factory import get_llm
     from langchain_core.messages import SystemMessage
 
-    llm = ChatOllama(
-        model=os.getenv("OLLAMA_DEFAULT_MODEL", "llama3.2:3b"),
-        temperature=0.0,
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-    )
+    llm = get_llm(temperature=0.0)
 
     memory_ctx = ""
     if state.get("memory"):
@@ -154,10 +170,10 @@ async def route_to_agent_node(state: AgentState) -> dict[str, Any]:
         if episodic:
             memory_ctx = f"\nRelevant context:\n{episodic}\n"
 
-    messages = [
-        SystemMessage(content=_ROUTE_SYSTEM_PROMPT),
-        HumanMessage(content=f"Goal: {state['goal']}{memory_ctx}"),
-    ]
+    messages = [SystemMessage(content=_ROUTE_SYSTEM_PROMPT)]
+    # Include conversation history (state["messages"]) in the planning prompt
+    messages.extend(state.get("messages", [])[-5:])
+    messages.append(HumanMessage(content=f"Goal: {state['goal']}{memory_ctx}"))
 
     try:
         response = await llm.ainvoke(messages)
@@ -304,7 +320,7 @@ async def execute_with_guardrails_node(state: AgentState) -> dict[str, Any]:
 
 
 async def _dispatch_step(agent_name: str, step: dict, state: AgentState) -> dict[str, Any]:
-    """Route a step to the correct agent module."""
+    """Route a step to the correct agent module. Normalizes hallucinated agent names."""
     try:
         from agents.planner.agent import PlannerAgent
         from agents.executor.agent import ExecutorAgent
@@ -312,6 +328,24 @@ async def _dispatch_step(agent_name: str, step: dict, state: AgentState) -> dict
         from agents.web.agent import WebAgent
         from agents.system.agent import SystemAgent
         from agents.code.agent import CodeAgent
+
+        # Normalize common hallucinations to official roles
+        normalization_map = {
+            "search_agent": "web",
+            "web_browser": "web",
+            "web_search": "web",
+            "research_agent": "web",
+            "file_agent": "file",
+            "code_agent": "code",
+            "summarizer_agent": "executor",
+            "system_agent": "system",
+            "planner_agent": "planner",
+            "executor_agent": "executor",
+        }
+        
+        normalized_name = normalization_map.get(agent_name.lower(), agent_name.lower())
+        if normalized_name != agent_name.lower():
+            logger.info("Normalized agent name", original=agent_name, normalized=normalized_name)
 
         agent_map = {
             AgentRole.PLANNER.value:  PlannerAgent,
@@ -321,12 +355,18 @@ async def _dispatch_step(agent_name: str, step: dict, state: AgentState) -> dict
             AgentRole.SYSTEM.value:   SystemAgent,
             AgentRole.CODE.value:     CodeAgent,
         }
-        AgentClass: Any = agent_map.get(agent_name, ExecutorAgent)
+        
+        AgentClass: Any = agent_map.get(normalized_name)
+        if not AgentClass:
+            logger.warning("Unknown agent role, defaulting to executor", role=agent_name)
+            AgentClass = ExecutorAgent
+            
         agent = AgentClass()
         return await agent.execute(step=step, state=state)
-    except ImportError:
+    except ImportError as exc:
+        logger.error("Agent import failed", error=str(exc))
         # Graceful stub for testing without all agents installed
-        await asyncio.sleep(0.05)  # simulate work
+        await asyncio.sleep(0.05)
         return {"success": True, "output": f"[stub] {step.get('description', 'done')}"}
 
 
@@ -383,7 +423,7 @@ async def respond_to_user_node(state: AgentState) -> dict[str, Any]:
 
 
 def _build_final_answer(state: AgentState) -> str:
-    """Build a human-readable summary from the execution results."""
+    """Build a human-readable summary or full report from the execution results."""
     intent_type = state.get("metadata", {}).get("intent_type", "SINGLE_AGENT_TASK")
     status = state.get("status", "")
 
@@ -399,7 +439,6 @@ def _build_final_answer(state: AgentState) -> str:
         if intent_type == "CONVERSATION":
             return "👋 Hello! I'm your Agentic OS. How can I help you today?"
         if intent_type == "SYSTEM_QUERY":
-            plan = state.get("plan", [])
             return (
                 f"🖥️  System status: running • "
                 f"Session: {state['session_id'][:8]} • "
@@ -407,21 +446,91 @@ def _build_final_answer(state: AgentState) -> str:
             )
         return "✅ Done! No output was produced."
 
-    # Summarise multi-step results
-    lines = ["✅ Task complete!\n"]
+    # 1. Look for a "Primary Report" (Summarization or Reasoning step)
+    primary_report = None
+    process_log = []
+
     for r in results:
         out = r.get("result", {})
         success = out.get("success", True)
         icon = "✓" if success else "✗"
         step_id = r.get("step_id", "?")
         agent = r.get("agent", "?")
-        output_text = out.get("output") or out.get("error") or "no output"
-        if isinstance(output_text, (dict, list)):
-            import json
-            output_text = json.dumps(output_text, indent=2)[:500]
-        lines.append(f"  {icon} [{agent}:{step_id}] {str(output_text)[:300]}")
+        
+        # Determine if this step produced a major "answer" or just a log
+        step_type = out.get("step_type", "")
+        output_text = out.get("output") or out.get("error") or "done"
+        
+        # If it's a reasoning/summarization step, it's a candidate for the primary report
+        if step_type in ("reason", "summarize", "synthesis"):
+            primary_report = output_text
+        
+        # Add to the process log (checklist)
+        # Increase truncation to 500 characters and keep newlines but format as a quote
+        clean_text = str(output_text).strip()
+        if len(clean_text) > 500:
+            clean_text = clean_text[:500] + "..."
+        
+        # Format the log snippet cleanly
+        if "\n" in clean_text:
+            # If multi-line, use a blockquote/code format
+            log_snippet = f"\n> {clean_text.replace(chr(10), chr(10) + '> ')}"
+        else:
+            log_snippet = f" {clean_text}"
+            
+        process_log.append(f"- **{icon} [{agent}:{step_id}]**{log_snippet}")
 
-    return "\n".join(lines)
+    # 2. Assemble the final response
+    if primary_report:
+        # Save to file system as a "compiled" artifact
+        filepath = _save_report_to_file(primary_report, state.get("task_id", "research"))
+        
+        # We have a high-quality report, prioritize it
+        sections = [
+            primary_report,
+            f"\n> 📄 Full report compiled to: `{filepath}`" if filepath else "",
+            "\n---\n### 🛠️ Process Log",
+            "\n".join(process_log)
+        ]
+        return "\n".join(sections)
+    
+    # 3. No single "Report" found, return the classic process log
+    final_output = ["### ✅ Task Complete\n"]
+    if len(results) == 1:
+        # Just one step? Show its full output.
+        res = results[0].get("result", {})
+        output = res.get("output") or res.get("error") or "Done."
+        return str(output)
+    
+    final_output.extend(process_log)
+    return "\n".join(final_output)
+
+
+def _save_report_to_file(content: str, task_id: str) -> Optional[str]:
+    """Save a reasoning/synthesis report to the repo's reports/ directory."""
+    try:
+        import os
+        from datetime import datetime
+        
+        # Determine the base directory (assume we're in core/ and want to go to reports/)
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        reports_dir = os.path.join(base_dir, "reports")
+        
+        if not os.path.exists(reports_dir):
+            os.makedirs(reports_dir)
+            
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"report_{task_id[:8]}_{timestamp}.md"
+        filepath = os.path.join(reports_dir, filename)
+        
+        with open(filepath, "w") as f:
+            f.write(content)
+            
+        logger.info("Report saved to file", path=filepath)
+        return filepath
+    except Exception as exc:
+        logger.warning("Failed to save report to file", error=str(exc))
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -557,11 +666,20 @@ class OrchestratorGraph:
         session.add_turn("user", user_input)
         await sm.update(session)
 
+        # Convert session history to LangChain messages
+        history = []
+        for turn in session.history[-10:]:
+            if turn["role"] == "user":
+                history.append(HumanMessage(content=turn["content"]))
+            elif turn["role"] == "assistant":
+                history.append(AIMessage(content=turn["content"]))
+
         initial = create_initial_state(
             user_input=user_input,
             user_id=user_id,
             session_id=sid,
             metadata=metadata,
+            history=history,
         )
         config = {"configurable": {"thread_id": initial["task_id"]}}
 
@@ -593,11 +711,20 @@ class OrchestratorGraph:
         session.add_turn("user", user_input)
         await sm.update(session)
 
+        # Convert session history to LangChain messages
+        history = []
+        for turn in session.history[-10:]:
+            if turn["role"] == "user":
+                history.append(HumanMessage(content=turn["content"]))
+            elif turn["role"] == "assistant":
+                history.append(AIMessage(content=turn["content"]))
+
         initial = create_initial_state(
             user_input=user_input,
             user_id=user_id,
             session_id=sid,
             metadata=metadata,
+            history=history,
         )
         config = {"configurable": {"thread_id": initial["task_id"]}}
 

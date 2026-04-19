@@ -276,10 +276,7 @@ class BaseAgent(ABC):
         model_env: str = "OLLAMA_DEFAULT_MODEL",
         temperature: float = 0.0,
     ) -> Any:
-        """Return a shared ChatOllama instance."""
-        from langchain_ollama import ChatOllama
-        return ChatOllama(
-            model=os.getenv(model_env, os.getenv("OLLAMA_DEFAULT_MODEL", "llama3.2:3b")),
-            temperature=temperature,
-            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        )
+        """Return a shared ChatModel instance from the factory."""
+        from core.llm_factory import get_llm
+        model_override = os.getenv(model_env)
+        return get_llm(model_override=model_override, temperature=temperature)

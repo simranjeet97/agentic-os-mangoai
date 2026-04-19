@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 try:
     import redis.asyncio as aioredis
+    import unittest.mock as mock
     _HAS_REDIS = True
 except ImportError:
     import unittest.mock as mock
@@ -69,20 +70,29 @@ _local_store: dict[str, Any] = {}
 
 
 async def _get_client() -> aioredis.Redis:
-    global _pool
+    global _pool, _HAS_REDIS
     if not _HAS_REDIS:
         return mock.AsyncMock()
 
     if _pool is None:
-        _pool = await aioredis.from_url(
-            REDIS_URL,
-            encoding="utf-8",
-            decode_responses=True,
-            max_connections=MAX_CONNECTIONS,
-            socket_connect_timeout=5,
-            socket_timeout=5,
-            retry_on_timeout=True,
-        )
+        try:
+            _pool = await aioredis.from_url(
+                REDIS_URL,
+                encoding="utf-8",
+                decode_responses=True,
+                max_connections=MAX_CONNECTIONS,
+                socket_connect_timeout=2,  # Faster fail
+                socket_timeout=2,
+                retry_on_timeout=False,
+            )
+            # Verify connection immediately
+            await _pool.ping()
+        except Exception as exc:
+            logger.warning("Redis connection failed. Falling back to local working memory.", error=str(exc))
+            _HAS_REDIS = False
+            _pool = None
+            return mock.AsyncMock()
+            
     return _pool
 
 
@@ -180,10 +190,12 @@ class WorkingMemory:
         """Save the entire session blob."""
         try:
             data["_updated_at"] = datetime.utcnow().isoformat()
+            r = await self._r()
+            
             if not _HAS_REDIS:
                 _local_store[_session_key(session_id)] = json.dumps(data, default=str)
                 return
-            r = await self._r()
+
             await r.setex(
                 _session_key(session_id),
                 ttl,

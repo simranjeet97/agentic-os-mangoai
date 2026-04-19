@@ -30,26 +30,51 @@ export default function Settings() {
               <div className="text-xs text-text-secondary">Fully private inference running locally.</div>
             </button>
             <button 
-              onClick={() => setProvider('claude')}
-              className={`p-4 rounded-[xl] border text-left transition-all ${provider === 'claude' ? 'border-accent-primary bg-accent-primary/10 shadow-[0_0_15px_theme(colors.accent.primary.10)]' : 'border-border bg-bg-overlay/50 hover:border-border-hover'}`}
+              onClick={() => setProvider('gemini')}
+              className={`p-4 rounded-xl border text-left transition-all ${provider === 'gemini' ? 'border-accent-primary bg-accent-primary/10 shadow-[0_0_15px_theme(colors.accent.primary.10)]' : 'border-border bg-bg-overlay/50 hover:border-border-hover'}`}
             >
-              <div className="font-bold text-text-primary mb-1">Claude API</div>
-              <div className="text-xs text-text-secondary">Anthropic Cloud API for maximum reasoning.</div>
+              <div className="font-bold text-text-primary mb-1">Gemini API</div>
+              <div className="text-xs text-text-secondary">Google Cloud API for multi-modal reasoning.</div>
             </button>
           </div>
           
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Model Name</label>
-              <select className="input-field max-w-sm">
-                <option>llama3.2:3b</option>
-                <option>mistral:7b</option>
-                <option>llama3:8b</option>
+              <select className="input-field max-w-sm" defaultValue={provider === 'gemini' ? 'gemini-3-flash-preview' : 'llama3.2:3b'}>
+                {provider === 'gemini' ? (
+                  <>
+                    <option>gemini-3.1-pro-preview</option>
+                    <option>gemini-3-flash-preview</option>
+                    <option>gemini-3.1-flash-lite-preview</option>
+                  </>
+                ) : (
+                  <>
+                    <option>llama3.2:3b</option>
+                    <option>mistral:7b</option>
+                    <option>llama3:8b</option>
+                  </>
+                )}
               </select>
             </div>
+
+            {provider === 'gemini' && (
+              <div>
+                <label className="block text-xs font-semibold text-accent-primary uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Shield size={12}/> API Key (Required)
+                </label>
+                <input 
+                  type="password" 
+                  className="input-field max-w-sm font-mono text-sm border-accent-primary/50 focus:border-accent-primary" 
+                  placeholder="AIzaSy..." 
+                  defaultValue=""
+                />
+                <p className="text-[10px] text-text-muted mt-2 italic">Stored locally in your environment or passed per-session.</p>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Endpoint URL</label>
-              <input type="text" className="input-field max-w-sm font-mono text-sm" defaultValue="http://localhost:11434" />
+              <input type="text" className="input-field max-w-sm font-mono text-sm" defaultValue={provider === 'gemini' ? 'https://generativelanguage.googleapis.com' : 'http://localhost:11434'} />
             </div>
           </div>
         </section>

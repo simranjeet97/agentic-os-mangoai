@@ -1,8 +1,8 @@
 """
 memory/chroma_store.py — ChromaDB-backed Semantic Memory.
 
-Indexes user documents, code files, and notes using sentence-transformers
-embeddings (all-MiniLM-L6-v2). Supports cosine similarity search.
+Indexes user documents, code files, and notes using Google Gemini 
+embeddings (text-embedding-004). Supports cosine similarity search.
 
 Auto-indexes ~/Documents and ~/Projects on first run (configurable).
 Chunking: 512 tokens (~400 words) with 50-token overlap.
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # ── Configuration ─────────────────────────────────────────────────────────────
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8001"))
-COLLECTION_PREFIX = os.getenv("CHROMA_COLLECTION_PREFIX", "agentic")
+COLLECTION_PREFIX = os.getenv("CHROMA_COLLECTION_PREFIX", "agentic_v3")
 CHUNK_SIZE = int(os.getenv("SEMANTIC_CHUNK_SIZE", "400"))   # words per chunk
 CHUNK_OVERLAP = int(os.getenv("SEMANTIC_CHUNK_OVERLAP", "50"))  # word overlap
 AUTO_INDEX_DIRS = os.getenv(

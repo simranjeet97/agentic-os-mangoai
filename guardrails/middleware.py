@@ -287,6 +287,20 @@ class GuardrailMiddleware:
                 suggested_alternatives=cmd_alternatives,
             )
 
+        # ── Step 5.5: Action-based approval (Explicitly for deletes) ───────────
+        if action.action_type == ActionType.FILE_DELETE and not approved_by:
+            risk_score = max(risk_score, self._approval_threshold + 0.5)
+            audit_id = await self._log(
+                action, risk_score, Outcome.PENDING,
+                details={"step": "action_policy", "action_type": "file_delete"},
+            )
+            raise PendingApprovalException(
+                action_id=action.action_id,
+                risk_score=risk_score,
+                explanation="File deletion requested. Human approval is required for all destructive file operations.",
+                component="GuardrailPolicy",
+            )
+
         # ── Step 6: UndoBuffer snapshot (before destructive ops) ──────────────
         if action.is_destructive and action.target_paths and not skip_snapshot:
             try:

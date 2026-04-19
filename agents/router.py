@@ -40,7 +40,7 @@ KEYWORD_RULES: list[tuple[list[str], str]] = [
     ),
     # ExecutorAgent
     (
-        ["execute", "run script", "run command", "run code", "bash", "shell",
+        ["code", "python", "script", "program", "execute", "run", "refactor", "debug", "test", "generate code",
          "subprocess", "execute command", "run this", "execute this"],
         "executor",
     ),
@@ -55,8 +55,8 @@ KEYWORD_RULES: list[tuple[list[str], str]] = [
     (
         ["browse", "url", "website", "webpage", "http", "https", "scrape",
          "crawl", "extract data", "form", "screenshot", "search google",
-         "search duckduckgo", "duckduckgo", "web search", "download page",
-         "click", "navigate to"],
+         "search duckduckgo", "duckduckgo", "web search", "search web",
+         "research", "google", "download page", "click", "navigate to", "latest", "news"],
         "web",
     ),
     # SystemAgent
@@ -129,13 +129,8 @@ class AgentRouter:
     @property
     def llm(self) -> Any:
         if self._llm is None:
-            import os
-            from langchain_ollama import ChatOllama
-            self._llm = ChatOllama(
-                model=os.getenv("OLLAMA_DEFAULT_MODEL", "llama3.2:3b"),
-                temperature=0.0,
-                base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            )
+            from core.llm_factory import get_llm
+            self._llm = get_llm(temperature=0.0)
         return self._llm
 
     # ── Primary API ───────────────────────────────────────────────────────────

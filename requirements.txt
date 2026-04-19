@@ -8,6 +8,8 @@ langchain==0.3.25
 langchain-core==0.3.60
 langchain-community==0.3.24
 langchain-ollama==0.3.2
+langchain-google-genai==2.0.8
+google-generativeai==0.8.4
 langgraph==0.2.69
 langgraph-checkpoint==2.0.25
 langchain-chroma==0.2.4
@@ -30,7 +32,7 @@ cryptography==44.0.2
 # ── Memory & Databases ────────────────────────────────────────────────────────
 redis==5.2.1
 chromadb
-sentence-transformers==3.4.1
+# sentence-transformers==3.4.1 (Removed in favor of Gemini Remote Embeddings)
 numpy==1.26.4
 aiosqlite==0.22.1
 networkx==3.2.1

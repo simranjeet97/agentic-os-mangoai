@@ -163,12 +163,16 @@ class PlannerAgent(BaseAgent):
             subtasks = self._parse_plan(raw)
         except Exception as exc:
             self.logger.error("Plan generation failed", error=str(exc))
-            # Fallback: single executor step
+            # Fallback: single step routed dynamically
+            from agents.router import get_router
+            router = get_router()
+            agent_name = await router.classify(goal)
+
             subtasks = [
                 {
                     "step_id": "1",
                     "description": goal,
-                    "agent": "executor",
+                    "agent": agent_name,
                     "dependencies": [],
                     "priority": 1,
                     "status": TaskStatus.PENDING.value,

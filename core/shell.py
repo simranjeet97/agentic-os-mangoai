@@ -26,6 +26,7 @@ from typing import Optional
 try:
     from rich.console import Console
     from rich.markup import escape
+    from rich.markdown import Markdown
     from rich.panel import Panel
     _RICH = True
 except ImportError:
@@ -331,8 +332,10 @@ class NaturalLanguageShell:
 
     def _print_assistant(self, text: str) -> None:
         if _RICH and self._console:
+            # Use Markdown rendering for the assistant's response
+            md = Markdown(text)
             self._console.print(
-                Panel(escape(text), title="[bold green]🤖 Agent[/bold green]", border_style="green")
+                Panel(md, title="[bold green]🤖 Agent[/bold green]", border_style="green")
             )
         else:
             print(f"\nAgent: {text}\n")
@@ -344,7 +347,7 @@ class NaturalLanguageShell:
         extra = ""
         if msgs:
             last_content = msgs[-1].content if hasattr(msgs[-1], "content") else str(msgs[-1])
-            extra = f" — {last_content[:80]}"
+            extra = f" — {last_content[:200]}"
         if status:
             extra = f" [{status}]{extra}"
         if _RICH and self._console:
