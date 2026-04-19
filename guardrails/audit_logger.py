@@ -134,6 +134,40 @@ class AuditLogger:
         self._init_db()
 
     # ------------------------------------------------------------------
+    # Compatibility methods
+    # ------------------------------------------------------------------
+
+    async def get_logs(
+        self,
+        agent_id: Optional[str] = None,
+        action_type: Optional[str] = None,
+        level: Optional[str] = None,
+        limit: int = 100,
+        since: Optional[datetime] = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Fetch logs with the interface expected by the API routes.
+        Maps 'level' to 'risk_score' and filters by date.
+        """
+        records = self.query(
+            agent_id=agent_id,
+            action_type=action_type,
+            limit=limit,
+        )
+
+        if level:
+            # Simple level -> score mapping
+            score_map = {"low": 3.0, "medium": 5.0, "high": 7.0, "critical": 9.0}
+            target_score = score_map.get(level.lower(), 0.0)
+            records = [r for r in records if r.get("risk_score", 0.0) >= target_score]
+
+        if since:
+            since_iso = since.isoformat()
+            records = [r for r in records if r.get("timestamp", "") >= since_iso]
+
+        return records
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -303,3 +337,18 @@ class AuditLogger:
     def _sign(payload: str) -> str:
         """Compute HMAC-SHA256 signature of a payload string."""
         return hmac.new(_AUDIT_HMAC_SECRET, payload.encode(), hashlib.sha256).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Singleton Factory
+# ---------------------------------------------------------------------------
+
+_instance: Optional[AuditLogger] = None
+
+
+def get_audit_logger(db_path: Optional[str] = None) -> AuditLogger:
+    """Return a singleton instance of the AuditLogger."""
+    global _instance
+    if _instance is None:
+        _instance = AuditLogger(db_path)
+    return _instance

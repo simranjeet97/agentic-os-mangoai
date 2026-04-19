@@ -18,7 +18,7 @@ Approval signal from client:
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Optional
 
 import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -37,7 +37,7 @@ logger = structlog.get_logger(__name__)
 class WSRunRequest(BaseModel):
     goal: str
     user_id: str = "anonymous"
-    session_id: str | None = None
+    session_id: Optional[str] = None
     metadata: dict[str, Any] = {}
 
 

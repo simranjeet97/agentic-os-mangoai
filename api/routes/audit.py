@@ -7,7 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Query, Depends, HTTPException
 
 from api.auth.users import get_current_user
-from guardrails.audit import get_audit_logger
+from guardrails.audit_logger import get_audit_logger
 
 router = APIRouter()
 

@@ -1,6 +1,33 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-bg-base: #08090b;
+  --color-bg-surface: #111318;
+  --color-bg-elevated: #1a1d26;
+  --color-bg-overlay: #212432;
+
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #9fa6b2;
+  --color-text-muted: #64748b;
+
+  --color-accent-primary: #6366f1;
+  --color-accent-glow: #818cf8;
+  --color-accent-green: #22c55e;
+  --color-accent-red: #ef4444;
+  --color-accent-yellow: #eab308;
+  --color-accent-cyan: #06b6d4;
+  --color-accent-orange: #f97316;
+
+  --color-border: rgba(99, 102, 241, 0.15);
+  --color-border-hover: rgba(99, 102, 241, 0.4);
+  --color-glass: rgba(17, 19, 24, 0.7);
+
+  --font-sans: "Inter", "system-ui", "sans-serif";
+  --font-mono: "JetBrains Mono", "Fira Code", "monospace";
+
+  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.3);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.6);
+}
 
 @layer base {
   body {

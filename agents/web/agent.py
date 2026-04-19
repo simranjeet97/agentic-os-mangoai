@@ -335,11 +335,27 @@ class WebAgent(BaseAgent):
 
         try:
             from duckduckgo_search import DDGS
-            loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(
-                None,
-                lambda: list(DDGS().text(query, max_results=max_results)),
-            )
+            
+            results = []
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    loop = asyncio.get_event_loop()
+                    def _do_search():
+                        with DDGS(timeout=25) as ddgs:
+                            return list(ddgs.text(query, max_results=max_results))
+                    
+                    results = await loop.run_in_executor(None, _do_search)
+                    if results:
+                        break
+                except Exception as e:
+                    err_str = str(e).lower()
+                    if ("timeout" in err_str or "parsing" in err_str) and attempt < max_retries - 1:
+                        self.logger.warning(f"DuckDuckGo search error (attempt {attempt+1}/{max_retries}), retrying...", error=str(e))
+                        await asyncio.sleep(1.5)
+                        continue
+                    raise e
+
             return {
                 "output": f"Found {len(results)} results for '{query}'",
                 "results": results,
@@ -350,7 +366,7 @@ class WebAgent(BaseAgent):
         except ImportError:
             self.logger.warning("duckduckgo_search not installed — falling back to browser search")
         except Exception as exc:
-            self.logger.warning("DuckDuckGo API search failed", error=str(exc))
+            self.logger.error("DuckDuckGo API search failed critically", error=str(exc))
 
         # Fallback: browser-based DDG search
         return await self._browser_search(
